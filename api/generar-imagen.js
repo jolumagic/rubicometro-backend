@@ -29,13 +29,17 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Usamos gemini-3.5-flash para evitar saturaciones temporales
     const modelName = "gemini-3.5-flash";
     const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+
+    // Controlador para evitar que la petición se quede colgada los 300 segundos
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // Cortar si pasa de 25 segundos
 
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
         contents: [
           {
@@ -53,6 +57,8 @@ export default async function handler(req, res) {
       })
     });
 
+    clearTimeout(timeoutId);
+
     const data = await response.json();
 
     if (!response.ok) {
@@ -67,6 +73,11 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, image: responseText });
 
   } catch (error) {
+    if (error.name === 'AbortError') {
+      console.error("Error: La petición a Gemini tardó demasiado y fue cancelada.");
+      return res.status(504).json({ success: false, error: 'Gateway Timeout: Gemini tardó demasiado en responder.' });
+    }
+
     console.error("Detalle del error:", error);
     return res.status(500).json({ success: false, error: error.message || error.toString() });
   }
