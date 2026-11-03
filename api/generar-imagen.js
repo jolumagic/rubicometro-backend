@@ -1,7 +1,3 @@
-const { HfInference } = require('@huggingface/inference');
-
-const inference = new HfInference(process.env.HF_TOKEN);
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,41 +8,36 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Método no permitido' });
 
   try {
-    const { imageBase64, prompt } = req.body;
+    // Ahora recibimos directamente la descripción textual exacta generada por tu CodePen
+    const { prompt } = req.body;
 
-    if (!imageBase64) {
-      return res.status(400).json({ success: false, error: 'Falta la imagen de referencia' });
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: 'Falta el prompt descriptivo' });
     }
 
-    const base64Data = imageBase64.split(',')[1];
-    const buffer = Buffer.from(base64Data, 'base64');
-    const blob = new Blob([buffer], { type: 'image/jpeg' });
+    const randomSeed = Math.floor(Math.random() * 999999999);
+    
+    // Prompt optimizado con la descripción detallada que manda tu frontend
+    const fullPrompt = `A professional studio product photograph of a classic Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution, photorealistic. ${prompt}`;
+    
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=1024&height=1024&seed=${randomSeed}&nologo=true&model=flux`;
 
-    console.log("Enviando imagen a Hugging Face (InstructPix2Pix)...");
+    console.log("Generando imagen basada en la descripción exacta del cubo...");
 
-    const imageResponse = await inference.imageToImage({
-      model: "timbrooks/instruct-pix2pix",
-      data: blob,
-      parameters: {
-        prompt: prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution",
-        num_inference_steps: 25,
-        guidance_scale: 7.5
-      }
-    });
+    const response = await fetch(imageUrl);
+    if (!response.ok) throw new Error(`Error al generar imagen: ${response.status}`);
 
-    const arrayBuffer = await imageResponse.arrayBuffer();
-    const finalBase64 = Buffer.from(arrayBuffer).toString('base64');
-
-    console.log("¡Imagen generada con éxito!");
+    const imageBuffer = await response.arrayBuffer();
+    const base64Image = Buffer.from(imageBuffer).toString('base64');
 
     return res.status(200).json({ 
       success: true, 
-      image: finalBase64, 
+      image: base64Image, 
       mimeType: 'image/jpeg' 
     });
 
   } catch (error) {
-    console.error("Error crítico en Vercel:", error);
-    return res.status(500).json({ success: false, error: error.message || error.toString() });
+    console.error("Error en Vercel:", error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
