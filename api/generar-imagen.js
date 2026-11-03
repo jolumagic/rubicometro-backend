@@ -1,7 +1,3 @@
-const { HfInference } = require('@huggingface/inference');
-
-const inference = new HfInference(process.env.HF_TOKEN);
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,32 +16,36 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.split(',')[1];
     const buffer = Buffer.from(base64Data, 'base64');
-    const blob = new Blob([buffer], { type: 'image/jpeg' });
 
-    console.log("Enviando imagen y prompt a Hugging Face (InstructPix2Pix)...");
+    console.log("Enviando petición directa a Hugging Face API...");
 
-    // Hamos la llamada al modelo
-    const result = await inference.imageToImage({
-      model: "timbrooks/instruct-pix2pix",
-      data: blob,
-      parameters: {
-        prompt: prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution",
-        num_inference_steps: 25,
-        guidance_scale: 7.5
+    // Llamada HTTP directa al modelo instruct-pix2pix
+    const response = await fetch(
+      "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.HF_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inputs: prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution",
+          parameters: {
+            image: base64Data, // Algunos modelos aceptan la imagen en base64 directamente en el JSON
+            num_inference_steps: 25,
+            guidance_scale: 7.5
+          }
+        }),
       }
-    });
+    );
 
-    // La respuesta de Hugging Face puede ser un Blob directamente o un objeto binario
-    let finalBase64 = "";
-    if (result instanceof Blob || typeof result.arrayBuffer === 'function') {
-      const arrayBuffer = await result.arrayBuffer();
-      finalBase64 = Buffer.from(arrayBuffer).toString('base64');
-    } else if (Buffer.isBuffer(result)) {
-      finalBase64 = result.toString('base64');
-    } else {
-      // Si por algún motivo devuelve otra estructura, intentamos parsearlo
-      throw new Error("Formato de respuesta desconocido recibido de Hugging Face");
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Hugging Face respondió con estado ${response.status}: ${errText}`);
     }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const finalBase64 = Buffer.from(arrayBuffer).toString('base64');
 
     return res.status(200).json({ 
       success: true, 
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Error en Hugging Face:", error);
+    console.error("Error crítico en Vercel:", error);
     return res.status(500).json({ success: false, error: error.message || error.toString() });
   }
 }
