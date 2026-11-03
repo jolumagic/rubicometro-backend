@@ -22,27 +22,6 @@ export default async function handler(req, res) {
       throw new Error('La variable GEMINI_API_KEY no está configurada en Vercel');
     }
 
-    // CONSULTA DE EMERGENCIA: Listar los modelos exactos disponibles para esta API Key
-    const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
-    const listResponse = await fetch(listUrl);
-    const listData = await listResponse.json();
-
-    console.log("=== MODELOS DISPONIBLES PARA TU CLAVE ===");
-    console.log(JSON.stringify(listData, null, 2));
-
-    if (!listResponse.ok) {
-      throw new Error(`Error al listar modelos: ${listData.error?.message || listResponse.status}`);
-    }
-
-    // Buscamos automáticamente el primer modelo que soporte generateContent
-    const validModel = listData.models?.find(m => m.supportedGenerationMethods?.includes("generateContent"));
-    
-    if (!validModel) {
-      throw new Error("No se encontró ningún modelo compatible con generateContent para esta API Key.");
-    }
-
-    console.log("Modelo seleccionado automáticamente:", validModel.name);
-
     const { imageBase64, prompt } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ success: false, error: 'Falta la imagen en base64' });
@@ -50,8 +29,9 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Usamos el nombre exacto que devuelve Google para tu cuenta
-    const url = `https://generativelanguage.googleapis.com/v1/${validModel.name}:generateContent?key=${apiKey}`;
+    // Usamos directamente el modelo moderno recomendado por la API en tus logs
+    const modelName = "gemini-3.8-flash";
+    const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
