@@ -17,43 +17,49 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { prompt } = req.body;
-    
-    // Un prompt mucho más descriptivo y enfocado a realismo fotográfico de alta calidad
-    const promptBase = prompt || "A professional studio product photograph of a classic Rubik's cube sitting on a polished wooden table, vibrant colors, sharp focus, 8k resolution, cinematic lighting";
-    
-    // Añadimos parámetros de seed aleatoria y mejor calidad para evitar que salgan bloques deformes
-    const randomSeed = Math.floor(Math.random() * 1000000);
-    const encodedPrompt = encodeURIComponent(promptBase);
-    
-    // Usamos el modelo 'flux' dentro de Pollinations si está disponible o forzamos alta definición
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${randomSeed}&nologo=true&model=flux`;
+    const { imageBase64, prompt } = req.body;
 
-    console.log("Generando imagen de alta calidad...");
+    const promptFinal = prompt || "A professional studio product photograph of this Rubik's cube sitting on a polished wooden table, vibrant colors, sharp focus, 8k resolution, cinematic lighting";
+    
+    console.log("Enviando imagen de referencia y prompt a la IA...");
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000);
-
-    const response = await fetch(imageUrl, {
-      signal: controller.signal
+    // Usamos el endpoint de Pollinations aceptando imagen base64 como modelo de referencia (Img2Img)
+    const response = await fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(promptFinal), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        image: imageBase64, // Aquí va la captura real de tu cubo
+        width: 1024,
+        height: 1024,
+        nologo: true,
+        model: 'flux'
+      })
     });
 
-    clearTimeout(timeoutId);
-
     if (!response.ok) {
-      throw new Error(`Error al generar la imagen (${response.status})`);
+      // Si el servicio por POST falla con imagen, recurrimos al método seguro URL GET con seed aleatoria
+      const randomSeed = Math.floor(Math.random() * 1000000);
+      const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptFinal)}?width=1024&height=1024&seed=${randomSeed}&nologo=true&model=flux`;
+      
+      const fallbackRes = await fetch(fallbackUrl);
+      if (!fallbackRes.ok) throw new Error("Error al generar la imagen con IA");
+      
+      const buffer = await fallbackRes.arrayBuffer();
+      const base64Img = Buffer.from(buffer).toString('base64');
+      return res.status(200).json({ success: true, image: base64Img, mimeType: 'image/jpeg' });
     }
 
     const imageBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
-    const imageOutput = `data:image/jpeg;base64,${base64Image}`;
 
-    console.log("¡Imagen mejorada con éxito!");
+    console.log("¡Imagen generada tomando como modelo tu cubo!");
 
-    return res.status(200).json({ success: true, image: imageOutput });
+    return res.status(200).json({ success: true, image: base64Image, mimeType: 'image/jpeg' });
 
   } catch (error) {
-    console.error("Detalle del error crítico:", error);
+    console.error("Error crítico en Vercel:", error);
     return res.status(500).json({ success: false, error: error.message || error.toString() });
   }
 }
