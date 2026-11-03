@@ -17,45 +17,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const hfToken = process.env.HUGGING_FACE_TOKEN;
-    if (!hfToken) {
-      throw new Error('La variable HUGGING_FACE_TOKEN no está configurada en Vercel');
-    }
-
     const { prompt } = req.body;
     const promptFinal = prompt || "A hyper-realistic photograph of a Rubik's cube on a wooden table, cinematic lighting, 8k resolution";
 
-    // Usamos Stable Diffusion 2.1, modelo totalmente estable y activo en el router de Hugging Face
-    const modelUrl = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-2-1";
+    // Codificamos el prompt para incluirlo de forma segura en la URL de generación gratuita
+    const encodedPrompt = encodeURIComponent(promptFinal);
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?nologo=true`;
 
-    console.log("Conectando con Stable Diffusion 2.1 en Hugging Face...");
+    console.log("Generando imagen mediante servicio gratuito externo...");
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
 
-    const response = await fetch(modelUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${hfToken}`,
-        'Content-Type': 'application/json',
-        'Accept': 'image/jpeg'
-      },
-      signal: controller.signal,
-      body: JSON.stringify({ inputs: promptFinal })
+    const response = await fetch(imageUrl, {
+      signal: controller.signal
     });
 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Error en Hugging Face (${response.status}): ${errText}`);
+      throw new Error(`Error al generar la imagen (${response.status})`);
     }
 
+    // Convertimos la respuesta binaria de la imagen a Base64 para enviarla a tu CodePen
     const imageBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
     const imageOutput = `data:image/jpeg;base64,${base64Image}`;
 
-    console.log("¡Imagen generada con éxito con Stable Diffusion 2.1!");
+    console.log("¡Imagen generada y convertida con éxito!");
 
     return res.status(200).json({ success: true, image: imageOutput });
 
