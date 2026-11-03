@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  // Configurar cabeceras CORS para permitir peticiones desde tu CodePen
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
@@ -8,24 +9,25 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Método no permitido' });
 
   try {
-    // Ahora recibimos directamente la descripción textual exacta generada por tu CodePen
+    // Recibimos el prompt detallado con el estado del cubo enviado desde el frontend
     const { prompt } = req.body;
 
     if (!prompt) {
-      return res.status(400).json({ success: false, error: 'Falta el prompt descriptivo' });
+      return res.status(400).json({ success: false, error: 'Falta el prompt descriptivo del cubo' });
     }
 
     const randomSeed = Math.floor(Math.random() * 999999999);
     
-    // Prompt optimizado con la descripción detallada que manda tu frontend
-    const fullPrompt = `A professional studio product photograph of a classic Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution, photorealistic. ${prompt}`;
+    // Unimos tu prompt descriptivo detallado con la calidad fotorrealista de estudio
+    const fullPrompt = `A professional studio product photograph of a classic Rubik's cube sitting on a polished wooden table, cinematic studio lighting, 8k resolution, highly detailed photorealistic. ${prompt}`;
     
+    // Petición a la API generativa basada en texto
     const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=1024&height=1024&seed=${randomSeed}&nologo=true&model=flux`;
 
-    console.log("Generando imagen basada en la descripción exacta del cubo...");
+    console.log("Generando imagen fotorrealista basada en las pegatinas del cubo...");
 
     const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error(`Error al generar imagen: ${response.status}`);
+    if (!response.ok) throw new Error(`Error al generar imagen en el proveedor: ${response.status}`);
 
     const imageBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
@@ -37,7 +39,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Error en Vercel:", error);
+    console.error("Error en el backend de Vercel:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }
