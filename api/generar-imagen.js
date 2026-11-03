@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  // Configurar cabeceras CORS para permitir peticiones desde CodePen
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -7,6 +8,7 @@ export default async function handler(req, res) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
+  // Responder de inmediato a las peticiones OPTIONS (preflight de CORS)
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -28,10 +30,11 @@ export default async function handler(req, res) {
       throw new Error('La variable GEMINI_API_KEY no está configurada en Vercel');
     }
 
+    // Limpiar el prefijo data:image/... si lo trae el string en base64
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Llamada REST directa a Google Gemini (evita errores de librerías y rutas v1beta)
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // URL usando el modelo específico para visión (imágenes) en la API v1
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
