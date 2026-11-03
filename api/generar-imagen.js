@@ -24,18 +24,28 @@ export default async function handler(req, res) {
 
     console.log("Enviando imagen y prompt a Hugging Face (InstructPix2Pix)...");
 
-    const responseImage = await inference.imageToImage({
+    // Hamos la llamada al modelo
+    const result = await inference.imageToImage({
       model: "timbrooks/instruct-pix2pix",
       data: blob,
       parameters: {
         prompt: prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution",
-        num_inference_steps: 30,
+        num_inference_steps: 25,
         guidance_scale: 7.5
       }
     });
 
-    const arrayBuffer = await responseImage.arrayBuffer();
-    const finalBase64 = Buffer.from(arrayBuffer).toString('base64');
+    // La respuesta de Hugging Face puede ser un Blob directamente o un objeto binario
+    let finalBase64 = "";
+    if (result instanceof Blob || typeof result.arrayBuffer === 'function') {
+      const arrayBuffer = await result.arrayBuffer();
+      finalBase64 = Buffer.from(arrayBuffer).toString('base64');
+    } else if (Buffer.isBuffer(result)) {
+      finalBase64 = result.toString('base64');
+    } else {
+      // Si por algún motivo devuelve otra estructura, intentamos parsearlo
+      throw new Error("Formato de respuesta desconocido recibido de Hugging Face");
+    }
 
     return res.status(200).json({ 
       success: true, 
@@ -45,6 +55,6 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("Error en Hugging Face:", error);
-    return res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message || error.toString() });
   }
 }
