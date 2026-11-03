@@ -17,94 +17,48 @@ export default async function handler(req, res) {
   }
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error('La variable GEMINI_API_KEY no está configurada en Vercel');
+    const hfToken = process.env.HUGGING_FACE_TOKEN;
+    if (!hfToken) {
+      throw new Error('La variable HUGGING_FACE_TOKEN no está configurada en Vercel');
     }
 
-    const { imageBase64, prompt } = req.body;
-    if (!imageBase64) {
-      return res.status(400).json({ success: false, error: 'Falta la imagen en base64' });
+    const { prompt } = req.body;
+    const promptFinal = prompt || "A hyper-realistic photograph of a Rubik's cube on a wooden table, cinematic lighting, 8k resolution";
+
+    // Usamos un modelo gratuito de Stable Diffusion en Hugging Face
+    const modelUrl = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+
+    console.log("Enviando petición a la API gratuita de Hugging Face...");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minuto de margen
+
+    const response = await fetch(modelUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${hfToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'image/jpeg'
+      },
+      signal: controller.signal,
+      body: JSON.stringify({ inputs: promptFinal })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Error en Hugging Face (${response.status}): ${errText}`);
     }
 
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    // Hugging Face devuelve directamente los bytes de la imagen (binario)
+    const imageBuffer = await response.arrayBuffer();
+    const base64Image = Buffer.from(imageBuffer).toString('base64');
+    const imageOutput = `data:image/jpeg;base64,${base64Image}`;
 
-    const modelosParaProbar = [
-      "gemini-3.1-flash-lite",
-      "gemini-3.5-flash",
-      "gemini-3.8-flash"
-    ];
+    console.log("¡Imagen generada y convertida con éxito!");
 
-    let data = null;
-    let ultimoError = null;
-
-    // Intentamos hasta 2 rondas completas si hay alta demanda general
-    for (let intento = 1; intento <= 2; intento++) {
-      console.log(`--- Ronda de intentos ${intento} ---`);
-
-      for (const modelName of modelosParaProbar) {
-        try {
-          console.log(`Probando modelo gratuito: ${modelName}...`);
-          const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
-
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { text: prompt || "Analyze this Rubik's cube state and describe a realistic version of it." },
-                    {
-                      inline_data: {
-                        mime_type: "image/jpeg",
-                        data: base64Data
-                      }
-                    }
-                  ]
-                }
-              ]
-            })
-          });
-
-          clearTimeout(timeoutId);
-          data = await response.json();
-
-          if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-            console.log(`¡Éxito con el modelo ${modelName} en la ronda ${intento}!`);
-            break;
-          } else {
-            ultimoError = data.error?.message || `Error HTTP: ${response.status}`;
-            console.warn(`Modelo ${modelName} ocupado: ${ultimoError}`);
-          }
-        } catch (err) {
-          ultimoError = err.message;
-          console.warn(`Excepción en ${modelName}: ${ultimoError}`);
-        }
-      }
-
-      // Si ya encontramos respuesta, salimos del bucle de rondas
-      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        break;
-      }
-
-      // Si llegamos aquí y falló todo, esperamos 3 segundos antes de la segunda ronda para dejar respirar a la API
-      if (intento < 2) {
-        console.log("Modelos saturados temporalmente. Esperando 3 segundos para reintentar...");
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-    }
-
-    const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!responseText) {
-      throw new Error(ultimoError || 'Los modelos gratuitos siguen experimentando alta demanda. Por favor, prueba de nuevo en un minuto.');
-    }
-
-    return res.status(200).json({ success: true, image: responseText });
+    return res.status(200).json({ success: true, image: imageOutput });
 
   } catch (error) {
     console.error("Detalle del error crítico:", error);
