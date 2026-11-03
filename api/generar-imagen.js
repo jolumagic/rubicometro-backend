@@ -19,44 +19,43 @@ export default async function handler(req, res) {
   try {
     const { imageBase64, prompt } = req.body;
 
-    const promptFinal = prompt || "A professional studio product photograph of this Rubik's cube sitting on a polished wooden table, vibrant colors, sharp focus, 8k resolution, cinematic lighting";
-    
-    console.log("Enviando imagen de referencia y prompt a la IA...");
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: 'Falta la imagen de referencia' });
+    }
 
-    // Usamos el endpoint de Pollinations aceptando imagen base64 como modelo de referencia (Img2Img)
-    const response = await fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(promptFinal), {
+    const promptFinal = prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, vibrant colors, sharp focus, 8k resolution, cinematic lighting";
+    
+    console.log("Enviando imagen y prompt al servicio de IA...");
+
+    // Petición POST estructurada para que la IA procese la imagen de entrada (Img2Img)
+    const aiResponse = await fetch('https://image.pollinations.ai/prompt/' + encodeURIComponent(promptFinal), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        image: imageBase64, // Aquí va la captura real de tu cubo
-        width: 1024,
-        height: 1024,
+        image: imageBase64,
+        private: true,
+        enhance: true,
         nologo: true,
         model: 'flux'
       })
     });
 
-    if (!response.ok) {
-      // Si el servicio por POST falla con imagen, recurrimos al método seguro URL GET con seed aleatoria
-      const randomSeed = Math.floor(Math.random() * 1000000);
-      const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptFinal)}?width=1024&height=1024&seed=${randomSeed}&nologo=true&model=flux`;
-      
-      const fallbackRes = await fetch(fallbackUrl);
-      if (!fallbackRes.ok) throw new Error("Error al generar la imagen con IA");
-      
-      const buffer = await fallbackRes.arrayBuffer();
-      const base64Img = Buffer.from(buffer).toString('base64');
-      return res.status(200).json({ success: true, image: base64Img, mimeType: 'image/jpeg' });
+    if (!aiResponse.ok) {
+      throw new Error(`Error en la IA de Pollinations: ${aiResponse.status}`);
     }
 
-    const imageBuffer = await response.arrayBuffer();
+    const imageBuffer = await aiResponse.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
 
-    console.log("¡Imagen generada tomando como modelo tu cubo!");
+    console.log("¡Imagen generada tomando como base tu cubo!");
 
-    return res.status(200).json({ success: true, image: base64Image, mimeType: 'image/jpeg' });
+    return res.status(200).json({ 
+      success: true, 
+      image: base64Image, 
+      mimeType: 'image/jpeg' 
+    });
 
   } catch (error) {
     console.error("Error crítico en Vercel:", error);
