@@ -29,56 +29,72 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const modelName = "gemini-3.5-flash";
-    const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+    // Lista de modelos ordenados por preferencia para intentar uno tras otro
+    const modelosParaProbar = [
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash"
+    ];
 
-    // Controlador para evitar que la petición se quede colgada los 300 segundos
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // Cortar si pasa de 25 segundos
+    let data = null;
+    let ultimoError = null;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt || "A realistic photograph of a Rubik's cube on a magical table" },
+    // Bucle para intentar con los modelos en cadena
+    for (const modelName of modelosParaProbar) {
+      try {
+        console.log(`Intentando conectar con el modelo: ${modelName}...`);
+        const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s por intento
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
               {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: base64Data
-                }
+                parts: [
+                  { text: prompt || "A realistic photograph of a Rubik's cube on a magical table" },
+                  {
+                    inline_data: {
+                      mime_type: "image/jpeg",
+                      data: base64Data
+                    }
+                  }
+                ]
               }
             ]
-          }
-        ]
-      })
-    });
+          })
+        });
 
-    clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
+        data = await response.json();
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
+        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          console.log(`¡Éxito con el modelo ${modelName}!`);
+          break; // Si funciona, salimos del bucle
+        } else {
+          ultimoError = data.error?.message || `Error HTTP: ${response.status}`;
+          console.warn(`Falló el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
+        }
+      } catch (err) {
+        ultimoError = err.message;
+        console.warn(`Excepción con el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
+      }
     }
 
-    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    // Si después de probar todos no hay texto válido, lanzamos el error
+    const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!responseText) {
-      throw new Error('La respuesta de Gemini no contiene texto válido.');
+      throw new Error(ultimoError || 'Todos los modelos fallaron o están saturados.');
     }
 
     return res.status(200).json({ success: true, image: responseText });
 
   } catch (error) {
-    if (error.name === 'AbortError') {
-      console.error("Error: La petición a Gemini tardó demasiado y fue cancelada.");
-      return res.status(504).json({ success: false, error: 'Gateway Timeout: Gemini tardó demasiado en responder.' });
-    }
-
-    console.error("Detalle del error:", error);
+    console.error("Detalle del error crítico:", error);
     return res.status(500).json({ success: false, error: error.message || error.toString() });
   }
 }
