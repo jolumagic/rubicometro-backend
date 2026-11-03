@@ -29,7 +29,6 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Lista de modelos ordenados por preferencia para intentar uno tras otro
     const modelosParaProbar = [
       "gemini-3.1-flash-lite",
       "gemini-3.5-flash",
@@ -39,14 +38,13 @@ export default async function handler(req, res) {
     let data = null;
     let ultimoError = null;
 
-    // Bucle para intentar con los modelos en cadena
     for (const modelName of modelosParaProbar) {
       try {
-        console.log(`Intentando conectar con el modelo: ${modelName}...`);
+        console.log(`Intentando conectar con el modelo: ${modelName} (dando hasta 2 minutos)...`);
         const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s por intento
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 segundos (2 minutos) por intento
 
         const response = await fetch(url, {
           method: 'POST',
@@ -73,22 +71,21 @@ export default async function handler(req, res) {
         data = await response.json();
 
         if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          console.log(`¡Éxito con el modelo ${modelName}!`);
-          break; // Si funciona, salimos del bucle
+          console.log(`¡Éxito total con el modelo ${modelName}!`);
+          break;
         } else {
           ultimoError = data.error?.message || `Error HTTP: ${response.status}`;
           console.warn(`Falló el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
         }
       } catch (err) {
         ultimoError = err.message;
-        console.warn(`Excepción con el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
+        console.warn(`Excepción o Timeout con el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
       }
     }
 
-    // Si después de probar todos no hay texto válido, lanzamos el error
     const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!responseText) {
-      throw new Error(ultimoError || 'Todos los modelos fallaron o están saturados.');
+      throw new Error(ultimoError || 'Todos los modelos fallaron o agotaron el tiempo máximo de espera.');
     }
 
     return res.status(200).json({ success: true, image: responseText });
