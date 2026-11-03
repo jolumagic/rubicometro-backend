@@ -1,6 +1,6 @@
-import { InferenceClient } from "@huggingface/inference";
+const { HfInference } = require('@huggingface/inference');
 
-const inference = new InferenceClient(process.env.HF_TOKEN);
+const inference = new HfInference(process.env.HF_TOKEN);
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
