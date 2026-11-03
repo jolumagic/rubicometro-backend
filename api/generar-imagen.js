@@ -29,7 +29,6 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Modelos permitidos en Free Tier ordenados para rotación
     const modelosParaProbar = [
       "gemini-3.1-flash-lite",
       "gemini-3.5-flash",
@@ -39,55 +38,70 @@ export default async function handler(req, res) {
     let data = null;
     let ultimoError = null;
 
-    for (const modelName of modelosParaProbar) {
-      try {
-        console.log(`Intentando conectar con el modelo gratuito: ${modelName}...`);
-        const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+    // Intentamos hasta 2 rondas completas si hay alta demanda general
+    for (let intento = 1; intento <= 2; intento++) {
+      console.log(`--- Ronda de intentos ${intento} ---`);
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutos de margen
+      for (const modelName of modelosParaProbar) {
+        try {
+          console.log(`Probando modelo gratuito: ${modelName}...`);
+          const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
 
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: prompt || "Analyze this Rubik's cube state and describe a realistic version of it." },
-                  {
-                    inline_data: {
-                      mime_type: "image/jpeg",
-                      data: base64Data
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    { text: prompt || "Analyze this Rubik's cube state and describe a realistic version of it." },
+                    {
+                      inline_data: {
+                        mime_type: "image/jpeg",
+                        data: base64Data
+                      }
                     }
-                  }
-                ]
-              }
-            ]
-          })
-        });
+                  ]
+                }
+              ]
+            })
+          });
 
-        clearTimeout(timeoutId);
-        data = await response.json();
+          clearTimeout(timeoutId);
+          data = await response.json();
 
-        // Si responde OK y trae contenido válido, salimos del bucle con éxito
-        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
-          console.log(`¡Éxito total con el modelo ${modelName}!`);
-          break;
-        } else {
-          ultimoError = data.error?.message || `Error HTTP: ${response.status}`;
-          console.warn(`El modelo ${modelName} falló o dio cuota: ${ultimoError}. Probando siguiente...`);
+          if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            console.log(`¡Éxito con el modelo ${modelName} en la ronda ${intento}!`);
+            break;
+          } else {
+            ultimoError = data.error?.message || `Error HTTP: ${response.status}`;
+            console.warn(`Modelo ${modelName} ocupado: ${ultimoError}`);
+          }
+        } catch (err) {
+          ultimoError = err.message;
+          console.warn(`Excepción en ${modelName}: ${ultimoError}`);
         }
-      } catch (err) {
-        ultimoError = err.message;
-        console.warn(`Excepción con el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
+      }
+
+      // Si ya encontramos respuesta, salimos del bucle de rondas
+      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        break;
+      }
+
+      // Si llegamos aquí y falló todo, esperamos 3 segundos antes de la segunda ronda para dejar respirar a la API
+      if (intento < 2) {
+        console.log("Modelos saturados temporalmente. Esperando 3 segundos para reintentar...");
+        await new Promise(resolve => setTimeout(resolve, 3000));
       }
     }
 
     const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!responseText) {
-      throw new Error(ultimoError || 'Todos los modelos gratuitos fallaron o agotaron la cuota.');
+      throw new Error(ultimoError || 'Los modelos gratuitos siguen experimentando alta demanda. Por favor, prueba de nuevo en un minuto.');
     }
 
     return res.status(200).json({ success: true, image: responseText });
