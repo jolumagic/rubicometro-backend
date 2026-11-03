@@ -18,13 +18,18 @@ export default async function handler(req, res) {
 
   try {
     const { prompt } = req.body;
-    const promptFinal = prompt || "A hyper-realistic photograph of a Rubik's cube on a wooden table, cinematic lighting, 8k resolution";
+    
+    // Un prompt mucho más descriptivo y enfocado a realismo fotográfico de alta calidad
+    const promptBase = prompt || "A professional studio product photograph of a classic Rubik's cube sitting on a polished wooden table, vibrant colors, sharp focus, 8k resolution, cinematic lighting";
+    
+    // Añadimos parámetros de seed aleatoria y mejor calidad para evitar que salgan bloques deformes
+    const randomSeed = Math.floor(Math.random() * 1000000);
+    const encodedPrompt = encodeURIComponent(promptBase);
+    
+    // Usamos el modelo 'flux' dentro de Pollinations si está disponible o forzamos alta definición
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${randomSeed}&nologo=true&model=flux`;
 
-    // Codificamos el prompt para incluirlo de forma segura en la URL de generación gratuita
-    const encodedPrompt = encodeURIComponent(promptFinal);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?nologo=true`;
-
-    console.log("Generando imagen mediante servicio gratuito externo...");
+    console.log("Generando imagen de alta calidad...");
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
@@ -39,12 +44,11 @@ export default async function handler(req, res) {
       throw new Error(`Error al generar la imagen (${response.status})`);
     }
 
-    // Convertimos la respuesta binaria de la imagen a Base64 para enviarla a tu CodePen
     const imageBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
     const imageOutput = `data:image/jpeg;base64,${base64Image}`;
 
-    console.log("¡Imagen generada y convertida con éxito!");
+    console.log("¡Imagen mejorada con éxito!");
 
     return res.status(200).json({ success: true, image: imageOutput });
 
