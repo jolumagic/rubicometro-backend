@@ -25,13 +25,13 @@ export default async function handler(req, res) {
     const { prompt } = req.body;
     const promptFinal = prompt || "A hyper-realistic photograph of a Rubik's cube on a wooden table, cinematic lighting, 8k resolution";
 
-    // Usamos un modelo gratuito de Stable Diffusion en Hugging Face
-    const modelUrl = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
+    // Usamos el nuevo endpoint router oficial de Hugging Face para modelos estables
+    const modelUrl = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0";
 
-    console.log("Enviando petición a la API gratuita de Hugging Face...");
+    console.log("Conectando con el router moderno de Hugging Face...");
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 1 minuto de margen
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
 
     const response = await fetch(modelUrl, {
       method: 'POST',
@@ -51,12 +51,11 @@ export default async function handler(req, res) {
       throw new Error(`Error en Hugging Face (${response.status}): ${errText}`);
     }
 
-    // Hugging Face devuelve directamente los bytes de la imagen (binario)
     const imageBuffer = await response.arrayBuffer();
     const base64Image = Buffer.from(imageBuffer).toString('base64');
     const imageOutput = `data:image/jpeg;base64,${base64Image}`;
 
-    console.log("¡Imagen generada y convertida con éxito!");
+    console.log("¡Imagen generada con éxito a través del router de Hugging Face!");
 
     return res.status(200).json({ success: true, image: imageOutput });
 
