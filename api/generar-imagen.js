@@ -29,7 +29,7 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Usamos directamente el modelo moderno recomendado por la API en tus logs
+    // Usamos el modelo moderno y activo para tu API Key
     const modelName = "gemini-3.8-flash";
     const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
 
