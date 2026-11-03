@@ -1,20 +1,12 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
 export default async function handler(req, res) {
-  // Configurar cabeceras CORS para permitir peticiones desde CodePen
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Token',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
-  );
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Responder de inmediato a las peticiones OPTIONS (preflight de CORS)
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -36,29 +28,45 @@ export default async function handler(req, res) {
       throw new Error('La variable GEMINI_API_KEY no está configurada en Vercel');
     }
 
-    // Inicializar el SDK clásico de Google Gen AI
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // Usamos el modelo con sufijo -latest para asegurar compatibilidad automática con la API
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-
-    // Limpiar el prefijo data:image/... si lo trae el string en base64
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    const imagePart = {
-      inlineData: {
-        data: base64Data,
-        mimeType: "image/jpeg"
+    // Llamada REST directa a Google Gemini (evita errores de librerías y rutas v1beta)
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    };
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt || "A realistic photograph of a Rubik's cube on a magical table" },
+              {
+                inline_data: {
+                  mime_type: "image/jpeg",
+                  data: base64Data
+                }
+              }
+            ]
+          }
+        ]
+      })
+    });
 
-    // Generar contenido con la imagen y el texto
-    const result = await model.generateContent([
-      prompt || "A realistic photograph of a Rubik's cube on a magical table",
-      imagePart
-    ]);
+    const data = await response.json();
 
-    const responseText = result.response.text();
+    if (!response.ok) {
+      throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
+    }
+
+    // Extraer la respuesta del texto generado por Gemini
+    const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!responseText) {
+      throw new Error('La respuesta de Gemini no contiene texto válido.');
+    }
 
     return res.status(200).json({
       success: true,
@@ -66,7 +74,7 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("Detalle del error con Gemini:", error);
+    console.error("Detalle del error con fetch directo:", error);
     return res.status(500).json({ 
       success: false, 
       error: error.message || error.toString() 
