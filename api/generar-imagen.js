@@ -1,7 +1,6 @@
-import { InferenceClient } from "@huggingface/inference";
+const { HfInference } = require('@huggingface/inference');
 
-// Inicializamos el cliente oficial de Hugging Face
-const client = new InferenceClient(process.env.HF_TOKEN);
+const inference = new HfInference(process.env.HF_TOKEN);
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -23,10 +22,9 @@ export default async function handler(req, res) {
     const buffer = Buffer.from(base64Data, 'base64');
     const blob = new Blob([buffer], { type: 'image/jpeg' });
 
-    console.log("Enviando imagen y prompt al modelo con Hugging Face Client...");
+    console.log("Enviando imagen a Hugging Face (InstructPix2Pix)...");
 
-    // Llamada oficial mediante la librería integrada
-    const imageResponse = await client.imageToImage({
+    const imageResponse = await inference.imageToImage({
       model: "timbrooks/instruct-pix2pix",
       data: blob,
       parameters: {
@@ -36,11 +34,10 @@ export default async function handler(req, res) {
       }
     });
 
-    // La librería devuelve directamente un Blob con la imagen resultante
     const arrayBuffer = await imageResponse.arrayBuffer();
     const finalBase64 = Buffer.from(arrayBuffer).toString('base64');
 
-    console.log("¡Imagen generada con éxito mediante Hugging Face!");
+    console.log("¡Imagen generada con éxito!");
 
     return res.status(200).json({ 
       success: true, 
