@@ -29,58 +29,68 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Usamos el modelo de imagen dedicado que aparecía en tu lista de Vercel
-    const modelName = "gemini-3.1-flash-image";
-    const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+    // Modelos permitidos en Free Tier ordenados para rotación
+    const modelosParaProbar = [
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash",
+      "gemini-3.8-flash"
+    ];
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000);
+    let data = null;
+    let ultimoError = null;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt || "Generate a realistic photograph based on this Rubik's cube state" },
+    for (const modelName of modelosParaProbar) {
+      try {
+        console.log(`Intentando conectar con el modelo gratuito: ${modelName}...`);
+        const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minutos de margen
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            contents: [
               {
-                inline_data: {
-                  mime_type: "image/jpeg",
-                  data: base64Data
-                }
+                parts: [
+                  { text: prompt || "Analyze this Rubik's cube state and describe a realistic version of it." },
+                  {
+                    inline_data: {
+                      mime_type: "image/jpeg",
+                      data: base64Data
+                    }
+                  }
+                ]
               }
             ]
-          }
-        ]
-      })
-    });
+          })
+        });
 
-    clearTimeout(timeoutId);
-    const data = await response.json();
+        clearTimeout(timeoutId);
+        data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
+        // Si responde OK y trae contenido válido, salimos del bucle con éxito
+        if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+          console.log(`¡Éxito total con el modelo ${modelName}!`);
+          break;
+        } else {
+          ultimoError = data.error?.message || `Error HTTP: ${response.status}`;
+          console.warn(`El modelo ${modelName} falló o dio cuota: ${ultimoError}. Probando siguiente...`);
+        }
+      } catch (err) {
+        ultimoError = err.message;
+        console.warn(`Excepción con el modelo ${modelName}: ${ultimoError}. Probando siguiente...`);
+      }
     }
 
-    // Buscamos si la respuesta trae datos binarios en inline_data (imagen generada) o texto
-    const candidatePart = data.candidates?.[0]?.content?.parts?.[0];
-    
-    let imageOutput = null;
-    if (candidatePart?.inline_data) {
-      // Si el modelo devuelve la imagen directamente en binario/base64
-      imageOutput = `data:${candidatePart.inline_data.mime_type};base64,${candidatePart.inline_data.data}`;
-    } else if (candidatePart?.text) {
-      // Si devuelve texto
-      imageOutput = candidatePart.text;
+    const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!responseText) {
+      throw new Error(ultimoError || 'Todos los modelos gratuitos fallaron o agotaron la cuota.');
     }
 
-    if (!imageOutput) {
-      throw new Error('La respuesta de Gemini no contiene una imagen válida.');
-    }
-
-    return res.status(200).json({ success: true, image: imageOutput });
+    return res.status(200).json({ success: true, image: responseText });
 
   } catch (error) {
     console.error("Detalle del error crítico:", error);
