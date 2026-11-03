@@ -29,8 +29,8 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // Usamos el modelo moderno y activo para tu API Key
-    const modelName = "gemini-3.8-flash";
+    // Usamos gemini-3.5-flash para evitar saturaciones temporales
+    const modelName = "gemini-3.5-flash";
     const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
