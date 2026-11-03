@@ -1,6 +1,7 @@
 {
   "name": "rubicometro-backend",
   "version": "1.0.0",
-  "private": true,
-  "dependencies": {}
+  "dependencies": {
+    "@huggingface/inference": "^2.8.0"
+  }
 }
