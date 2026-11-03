@@ -25,10 +25,10 @@ export default async function handler(req, res) {
     const { prompt } = req.body;
     const promptFinal = prompt || "A hyper-realistic photograph of a Rubik's cube on a wooden table, cinematic lighting, 8k resolution";
 
-    // Usamos FLUX.1-schnell, un modelo moderno, rápido y totalmente activo en Hugging Face
-    const modelUrl = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell";
+    // Usamos Stable Diffusion 2.1, modelo totalmente estable y activo en el router de Hugging Face
+    const modelUrl = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-2-1";
 
-    console.log("Conectando con FLUX.1-schnell en Hugging Face...");
+    console.log("Conectando con Stable Diffusion 2.1 en Hugging Face...");
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     const base64Image = Buffer.from(imageBuffer).toString('base64');
     const imageOutput = `data:image/jpeg;base64,${base64Image}`;
 
-    console.log("¡Imagen generada con éxito con FLUX!");
+    console.log("¡Imagen generada con éxito con Stable Diffusion 2.1!");
 
     return res.status(200).json({ success: true, image: imageOutput });
 
