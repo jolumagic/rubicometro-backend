@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Configurar cabeceras CORS para permitir peticiones desde CodePen
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -8,7 +7,6 @@ export default async function handler(req, res) {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
-  // Responder de inmediato a las peticiones OPTIONS (preflight de CORS)
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
@@ -19,28 +17,45 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { imageBase64, prompt } = req.body;
-    
-    if (!imageBase64) {
-      return res.status(400).json({ success: false, error: 'Falta la imagen en base64' });
-    }
-
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       throw new Error('La variable GEMINI_API_KEY no está configurada en Vercel');
     }
 
-    // Limpiar el prefijo data:image/... si lo trae el string en base64
+    // CONSULTA DE EMERGENCIA: Listar los modelos exactos disponibles para esta API Key
+    const listUrl = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+    const listResponse = await fetch(listUrl);
+    const listData = await listResponse.json();
+
+    console.log("=== MODELOS DISPONIBLES PARA TU CLAVE ===");
+    console.log(JSON.stringify(listData, null, 2));
+
+    if (!listResponse.ok) {
+      throw new Error(`Error al listar modelos: ${listData.error?.message || listResponse.status}`);
+    }
+
+    // Buscamos automáticamente el primer modelo que soporte generateContent
+    const validModel = listData.models?.find(m => m.supportedGenerationMethods?.includes("generateContent"));
+    
+    if (!validModel) {
+      throw new Error("No se encontró ningún modelo compatible con generateContent para esta API Key.");
+    }
+
+    console.log("Modelo seleccionado automáticamente:", validModel.name);
+
+    const { imageBase64, prompt } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, error: 'Falta la imagen en base64' });
+    }
+
     const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-    // URL usando el modelo específico para visión (imágenes) en la API v1
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent?key=${apiKey}`;
+    // Usamos el nombre exacto que devuelve Google para tu cuenta
+    const url = `https://generativelanguage.googleapis.com/v1/${validModel.name}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [
           {
@@ -64,23 +79,15 @@ export default async function handler(req, res) {
       throw new Error(data.error?.message || `Error HTTP: ${response.status}`);
     }
 
-    // Extraer la respuesta del texto generado por Gemini
     const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
     if (!responseText) {
       throw new Error('La respuesta de Gemini no contiene texto válido.');
     }
 
-    return res.status(200).json({
-      success: true,
-      image: responseText
-    });
+    return res.status(200).json({ success: true, image: responseText });
 
   } catch (error) {
-    console.error("Detalle del error con fetch directo:", error);
-    return res.status(500).json({ 
-      success: false, 
-      error: error.message || error.toString() 
-    });
+    console.error("Detalle del error:", error);
+    return res.status(500).json({ success: false, error: error.message || error.toString() });
   }
 }
