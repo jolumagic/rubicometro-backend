@@ -1,3 +1,8 @@
+import { InferenceClient } from "@huggingface/inference";
+
+// Inicializamos el cliente oficial de Hugging Face
+const client = new InferenceClient(process.env.HF_TOKEN);
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,36 +21,26 @@ export default async function handler(req, res) {
 
     const base64Data = imageBase64.split(',')[1];
     const buffer = Buffer.from(base64Data, 'base64');
+    const blob = new Blob([buffer], { type: 'image/jpeg' });
 
-    console.log("Enviando petición directa a Hugging Face API...");
+    console.log("Enviando imagen y prompt al modelo con Hugging Face Client...");
 
-    // Llamada HTTP directa al modelo instruct-pix2pix
-    const response = await fetch(
-      "https://api-inference.huggingface.co/models/timbrooks/instruct-pix2pix",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          inputs: prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution",
-          parameters: {
-            image: base64Data, // Algunos modelos aceptan la imagen en base64 directamente en el JSON
-            num_inference_steps: 25,
-            guidance_scale: 7.5
-          }
-        }),
+    // Llamada oficial mediante la librería integrada
+    const imageResponse = await client.imageToImage({
+      model: "timbrooks/instruct-pix2pix",
+      data: blob,
+      parameters: {
+        prompt: prompt || "A professional studio product photograph of this exact Rubik's cube sitting on a polished wooden table, cinematic lighting, 8k resolution",
+        num_inference_steps: 25,
+        guidance_scale: 7.5
       }
-    );
+    });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Hugging Face respondió con estado ${response.status}: ${errText}`);
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
+    // La librería devuelve directamente un Blob con la imagen resultante
+    const arrayBuffer = await imageResponse.arrayBuffer();
     const finalBase64 = Buffer.from(arrayBuffer).toString('base64');
+
+    console.log("¡Imagen generada con éxito mediante Hugging Face!");
 
     return res.status(200).json({ 
       success: true, 
